@@ -34,7 +34,7 @@ def analyze_audio_with_gemini(audio_file_path):
     print("檔案處理完成，開始分析...")
 
     # 4. 初始化模型
-    model = genai.GenerativeModel(model_name="gemini-1.5-pro")
+    model = genai.GenerativeModel(model_name="gemini-2.5-flash")
 
     # ================= 修改點 1：修改 Prompt 要求 CSV 格式 =================
     prompt = """
