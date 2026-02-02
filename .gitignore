@@ -1,5 +1,8 @@
 # 忽略虛擬環境資料夾
 analyze_audio_with_gemini/
+Lib/
+Scripts/
+share/
 venv/
 env/
 

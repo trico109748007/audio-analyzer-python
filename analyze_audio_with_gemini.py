@@ -18,51 +18,70 @@ genai.configure(api_key=api_key)
 def analyze_audio_with_gemini(audio_file_path):
     print(f"正在處理檔案: {audio_file_path} ...")
 
-    # 2. 上傳檔案到 Google File API (這是處理長音檔的關鍵！)
-    # 這樣做可以讓 AI 讀取長達數小時的音檔，而不會被截斷
+    # 2. 上傳檔案
     audio_file = genai.upload_file(path=audio_file_path)
-    
     print(f"檔案上傳完成: {audio_file.uri}")
-    print("等待檔案處理中 (通常需要幾秒鐘)...")
+    print("等待檔案處理中...")
 
-    # 3. 等待檔案狀態轉為 'ACTIVE' (可用狀態)
+    # 3. 等待處理
     while audio_file.state.name == "PROCESSING":
         time.sleep(2)
         audio_file = genai.get_file(audio_file.name)
 
     if audio_file.state.name == "FAILED":
-        raise ValueError("檔案處理失敗，請檢查格式是否支援。")
+        raise ValueError("檔案處理失敗。")
 
-    print("檔案處理完成，開始呼叫 Gemini 進行分析...")
+    print("檔案處理完成，開始分析...")
 
-    # 4. 初始化模型 (gemini-2.5-flash)
-    model = genai.GenerativeModel(model_name="gemini-2.5-flash")
+    # 4. 初始化模型
+    model = genai.GenerativeModel(model_name="gemini-1.5-pro")
 
-    # 5. 設定精確的 Prompt (提示詞)
-    # 這裡明確要求「時間軸」與「語者辨識」
+    # ================= 修改點 1：修改 Prompt 要求 CSV 格式 =================
     prompt = """
-    你是一位專業的會議記錄與語音分析專家。請仔細聆聽這份錄音檔，並完成以下任務：
+    你是一位專業的會議記錄專家。請分析這份錄音檔：
 
-    1. **語者區隔 (Speaker Diarization)**：辨識有多少位不同的發言者，並根據聲音特徵給予標籤（例如：主持人、講者A、講者B...）。如果他們有自我介紹，請標註真實姓名或身份。
-    2. **時間軸紀錄 (Timestamps)**：請依序列出對話內容，並標註精確的「開始時間」與「結束時間」。
-    3. **逐字摘要**：摘要該段發言的重點。
+    1. **語者區隔**：辨識不同發言者並給予標籤（如：主持人、講者A）。
+    2. **時間軸**：標註精確的「開始時間-結束時間」。
+    3. **摘要**：摘要該段發言重點。
 
-    請以 Markdown 表格格式輸出，欄位包含：
-    | 時間範圍 | 發言者 | 內容摘要/重點逐字 | 聲音特徵備註 |
+    請嚴格遵守以下輸出規則：
+    1. **直接輸出 CSV 格式**內容，不要包含 Markdown 標記（如 ```csv），不要有任何開場白或結尾文字。
+    2. 使用逗號 (,) 分隔，若內容包含逗號請用雙引號包覆。
+    3. 第一行為標題列：
+    時間範圍,發言者,內容摘要,聲音特徵
     """
+    # ====================================================================
 
     # 6. 發送請求
     response = model.generate_content(
         [audio_file, prompt],
-        request_options={"timeout": 600} # 設定較長的超時時間，避免分析到一半斷線
+        request_options={"timeout": 600}
     )
 
-    # 7. 輸出結果
-    print("\n" + "="*30 + " 分析結果 " + "="*30 + "\n")
-    print(response.text)
+    # ================= 修改點 2：輸出成 CSV 檔案 =================
+    # 設定輸出的檔名 (您可以依需求修改)
+    output_filename = "meeting_analysis.csv"
+
+    # 清理可能殘留的 Markdown 標記 (以防 AI 還是加了 ```)
+    csv_text = response.text.replace("```csv", "").replace("```", "").strip()
+
+    try:
+        # 使用 utf-8-sig 編碼，讓 Excel 開啟時中文不會亂碼
+        with open(output_filename, "w", encoding="utf-8-sig") as f:
+            f.write(csv_text)
+        
+        print("\n" + "="*30 + " 完成 " + "="*30)
+        print(f"分析成功！結果已儲存至檔案：{output_filename}")
+        print("您現在可以用 Excel 開啟這個檔案了。")
+        
+    except Exception as e:
+        print(f"存檔時發生錯誤: {e}")
+        # 如果存檔失敗，還是印出來以防資料遺失
+        print(response.text)
+    # ==========================================================
     
     # (選用) 分析結束後刪除雲端暫存檔，節省空間
-    # genai.delete_file(audio_file.name)
+    genai.delete_file(audio_file.name)
 
 # --- 執行程式 ---
 # 請將這裡換成您電腦中錄音檔的實際路徑
